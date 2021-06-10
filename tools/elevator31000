@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Raises map level by 31000, so that all old maps will be on a level > 30000
+
+add=31000
+
+for f in ../maps/*.tiles.txt
+do
+    z=$(grep -oP '^L: \K-?[0-9]+' "$f")
+    ((z=z+add))
+    sed -i "s/^L: -\?[0-9]*/L: $z/" "$f"
+done
+
+for f in ../maps/*.warps.txt
+do
+    if [ -s "$f" ]; then
+        while IFS=';' read xs ys xt yt zt
+        do
+            ((zt=zt+add))
+            echo "$xs;$ys;$xt;$yt;$zt" >> "$f.new"
+        done < "$f"
+
+        mv "$f.new" "$f"
+    fi
+done
