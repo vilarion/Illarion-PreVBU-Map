@@ -1,0 +1,88 @@
+#!/bin/bash
+
+# Converts Illarion Map Format (IMF) v1 to IMFv2.
+# Does not change files in IMFv2.
+
+# IMFv1:
+#
+# *.tiles.txt:
+#
+# L: <level>
+# X: <leftmost x>
+# Y: <upmost y>
+# W: <width>
+# H: <height>
+# <x>;<y>;<tile id>[;<music id>[;<unused value>]]
+#
+# *.items.txt:
+# <x>;<y>;<unused value>;<item id>;<data number>[;<quality>]
+
+# IMFv2:
+#
+# *.tiles.txt:
+#
+# V: 2
+# L: <level>
+# X: <leftmost x>
+# Y: <upmost y>
+# W: <width>
+# H: <height>
+# <x>;<y>;<tile id>;<music id>
+#
+# *.items.txt:
+# <x>;<y>;<item id>;<quality>[;<key>=<value>]*
+
+# In *.tiles.txt: insert "V: 2" above "L:" header, if header "L:" is in the first line
+find ../maps -type f -name "*.tiles.txt" -exec sed -i '1!b;/^L.*/i V: 2' "{}" \;
+
+# In *.tiles.txt: remove unused value
+find ../maps -type f -name "*.tiles.txt" -exec sed -i 's/^\([0-9]*;[0-9]*;[0-9]*;[0-9]*\);[0-9]*/\1/g' "{}" \;
+
+# In *.tiles.txt: set music to 0 if missing
+find ../maps -type f -name "*.tiles.txt" -exec sed -i 's/^\([0-9]*;[0-9]*;[0-9]*\)$/\1;0/g' "{}" \;
+
+# In *.items.txt: remove unused value if quality doesn't exist and add default quality 333 after item id
+find ../maps -type f -name "*.items.txt" -exec sed -i 's/^\([0-9]*;[0-9]*\);[0-9]*\(;[0-9]*\)\(;[0-9]*\)$/\1\2;333\3/g' "{}" \;
+
+# In *.items.txt: put quality after item id if quality exists and remove unused value
+find ../maps -type f -name "*.items.txt" -exec sed -i 's/^\([0-9]*;[0-9]*\);[0-9]*\(;[0-9]*\)\(;[0-9]*\)\(;[0-9]*\)$/\1\2\4\3/g' "{}" \;
+
+# In *.items.txt: convert old data d != 0 to data=d
+find ../maps -type f -name "*.items.txt" -exec sed -i 's/^\(.*;.*;.*;.*;\)\([^0][0-9]*\)$/\1data=\2/g' "{}" \;
+
+# In *.items.txt: remove old data 0
+find ../maps -type f -name "*.items.txt" -exec sed -i 's/^\(.*;.*;.*;.*\);0$/\1/g' "{}" \;
+
+# Pre-VBU IMFv1 had warps stored in a single file warp.txt:
+# <start x>;<start y>;<start z>;<target x>;<target y>;<target z>;
+#
+# Post-VBU every map got a *.warps.txt with map-relative start coordinates:
+# <start x>;<start y>;<target x>;<target y>;<target z>
+
+warps="../maps/warp.txt"
+
+if [ -f "$warps" ]; then
+    for f in ../maps/*.tiles.txt
+    do
+        x=$(grep -oP '^X: \K-?[0-9]+' "$f")
+        y=$(grep -oP '^Y: \K-?[0-9]+' "$f")
+        z=$(grep -oP '^L: \K-?[0-9]+' "$f")
+        w=$(grep -oP '^W: \K[0-9]+' "$f")
+        h=$(grep -oP '^H: \K[0-9]+' "$f")
+
+        warpfile=${f/.tiles.txt/.warps.txt}
+        touch "$warpfile"
+
+        while IFS=';' read xs ys zs xt yt zt rest
+        do
+            ((xrel=xs-x))
+            ((yrel=ys-y))
+
+            if (( zs == z )) && (( xs >= x )) && (( xs < x + w )) && (( ys >= y )) && (( ys < y + h )); then
+               echo "$xrel;$yrel;$xt;$yt;$zt" >> "$warpfile"
+            fi
+        done < "$warps"
+    done
+
+    rm "$warps"
+fi
